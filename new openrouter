@@ -1,0 +1,254 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Chatbot (OpenRouter)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f5f6fa;
+      font-family: Arial, sans-serif;
+    }
+    #chat-open-btn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 18px 40px;
+      font-size: 1.2em;
+      background: #0084ff;
+      color: #fff;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      z-index: 100;
+      transition: background 0.2s;
+    }
+    #chat-open-btn:hover {
+      background: #005bb5;
+    }
+    #chatbot-modal {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 95vw;
+      max-width: 350px;
+      height: 70vh;
+      max-height: 500px;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      z-index: 200;
+      flex-direction: column;
+      overflow: hidden;
+      animation: fadeIn 0.2s;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translate(-50%, -40%);}
+      to { opacity: 1; transform: translate(-50%, -50%);}
+    }
+    .chatbot-header {
+      background: #0084ff;
+      color: #fff;
+      padding: 14px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .chatbot-header span {
+      cursor: pointer;
+      font-size: 1.3em;
+      font-weight: bold;
+    }
+    .chatbot-messages {
+      flex: 1;
+      padding: 14px;
+      overflow-y: auto;
+      background: #f7f9fb;
+      font-size: 1em;
+    }
+    .chatbot-message {
+      margin-bottom: 10px;
+      display: flex;
+      align-items: flex-start;
+    }
+    .chatbot-message.bot p {
+      background: #e3f0ff;
+      color: #222;
+      border-radius: 10px 10px 10px 0;
+      padding: 8px 14px;
+      margin: 0;
+      max-width: 80%;
+    }
+    .chatbot-message.user {
+      justify-content: flex-end;
+    }
+    .chatbot-message.user p {
+      background: #0084ff;
+      color: #fff;
+      border-radius: 10px 10px 0 10px;
+      padding: 8px 14px;
+      margin: 0;
+      max-width: 80%;
+    }
+    .chatbot-input-area {
+      display: flex;
+      border-top: 1px solid #eee;
+      padding: 10px;
+      background: #fafbfc;
+    }
+    .chatbot-input-area input {
+      flex: 1;
+      border: 1px solid #ccc;
+      border-radius: 20px;
+      padding: 8px 14px;
+      font-size: 1em;
+      outline: none;
+    }
+    .chatbot-input-area button {
+      margin-left: 8px;
+      padding: 8px 18px;
+      border: none;
+      border-radius: 20px;
+      background: #0084ff;
+      color: #fff;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .chatbot-input-area button:hover {
+      background: #005bb5;
+    }
+    @media (max-width: 400px) {
+      #chatbot-modal {
+        max-width: 98vw;
+        height: 80vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <button id="chat-open-btn">Chat</button>
+  <div id="chatbot-modal">
+    <div class="chatbot-header">
+      <span>Chatbot</span>
+      <span id="chatbot-close-btn">&times;</span>
+    </div>
+    <div class="chatbot-messages" id="chatbot-messages">
+      <div class="chatbot-message bot"><p>Hi there! 👋<br>How can I help you today?</p></div>
+    </div>
+    <div class="chatbot-input-area">
+      <input type="text" id="chatbot-input" placeholder="Type your message..." autocomplete="off" />
+      <button id="chatbot-send-btn">Send</button>
+    </div>
+  </div>
+  <script>
+    // --- CONFIGURATION ---
+    const API_KEY = "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";
+    const MODEL = "deepseek/deepseek-r1-0528-qwen3-8b:free"; // Your provided model
+    const API_URL = "https://openrouter.ai/api/v1/chat/completions";
+    // Optional: Set your site info for OpenRouter rankings
+    const HTTP_REFERER = ""; // e.g. "https://your-site.com"
+    const X_TITLE = "";      // e.g. "Your Site Name"
+
+    // --- UI ELEMENTS ---
+    const openBtn = document.getElementById('chat-open-btn');
+    const modal = document.getElementById('chatbot-modal');
+    const closeBtn = document.getElementById('chatbot-close-btn');
+    const messages = document.getElementById('chatbot-messages');
+    const input = document.getElementById('chatbot-input');
+    const sendBtn = document.getElementById('chatbot-send-btn');
+
+    // --- CHAT HISTORY ---
+    let chatHistory = [
+      { role: "assistant", content: "Hi there! 👋\nHow can I help you today?" }
+    ];
+
+    // --- UI HANDLERS ---
+    openBtn.onclick = () => {
+      modal.style.display = 'flex';
+      openBtn.style.display = 'none';
+      input.focus();
+    };
+    closeBtn.onclick = () => {
+      modal.style.display = 'none';
+      openBtn.style.display = 'block';
+    };
+
+    // --- MESSAGE APPENDING ---
+    function addMessage(msg, sender) {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'chatbot-message ' + sender;
+      const p = document.createElement('p');
+      p.textContent = msg;
+      msgDiv.appendChild(p);
+      messages.appendChild(msgDiv);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    // --- SEND MESSAGE HANDLER ---
+    async function sendMessage() {
+      const userMsg = input.value.trim();
+      if (!userMsg) return;
+      addMessage(userMsg, 'user');
+      chatHistory.push({ role: "user", content: userMsg });
+      input.value = '';
+      // Show loading
+      const loadingDiv = document.createElement('div');
+      loadingDiv.className = 'chatbot-message bot';
+      const loadingP = document.createElement('p');
+      loadingP.textContent = "Thinking...";
+      loadingDiv.appendChild(loadingP);
+      messages.appendChild(loadingDiv);
+      messages.scrollTop = messages.scrollHeight;
+
+      // --- API REQUEST ---
+      try {
+        const headers = {
+          "Authorization": "Bearer " + API_KEY,
+          "Content-Type": "application/json"
+        };
+        if (HTTP_REFERER) headers["HTTP-Referer"] = HTTP_REFERER;
+        if (X_TITLE) headers["X-Title"] = X_TITLE;
+
+        const response = await fetch(API_URL, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: MODEL,
+            messages: chatHistory
+          })
+        });
+        if (!response.ok) {
+          throw new Error("API error: " + response.status);
+        }
+        const data = await response.json();
+        // Parse assistant reply
+        const reply = data.choices?.[0]?.message?.content || "Sorry, no response.";
+        chatHistory.push({ role: "assistant", content: reply });
+        // Remove loading
+        messages.removeChild(loadingDiv);
+        addMessage(reply, 'bot');
+      } catch (err) {
+        messages.removeChild(loadingDiv);
+        addMessage("Sorry, there was an error connecting to the AI.", 'bot');
+      }
+    }
+
+    sendBtn.onclick = sendMessage;
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') sendMessage();
+    });
+  </script>
+</body>
+</html>
